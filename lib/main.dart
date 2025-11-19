@@ -1,18 +1,43 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart'; // for profile picture upload
+import 'artist_profile_page.dart';
+import 'client_artist_profile_page.dart';
+import 'artists_page.dart'; // add this
+import 'company_profile_page.dart';
+import 'shared/payment_type.dart';
+import 'company_home_page.dart';
+// Replace your two imports with:
+import 'request_custom_design_page.dart' as public_request;
+import 'client_request_custom_design_page.dart' as client_request;
+import 'company_request_custom_design_page.dart' as company_request;
+import 'supabase_client.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await SupabaseConfig.init();
+
+  runApp(const NailStoreApp());
+}
+
 
 void main() {
   runApp(const NailStoreApp());
 }
 
 const Color kPink = Color(0xFFE91E63);
+// ===== place these TOP-LEVEL (after imports, before classes) =====
+enum ExistingUserType { client, artist, company }
 
-enum PaymentType {
-  applePay,
-  paypal,
-  creditCard,
-  venmo,
+String _labelForType(ExistingUserType t) {
+  switch (t) {
+    case ExistingUserType.client:
+      return 'Client';
+    case ExistingUserType.artist:
+      return 'Artist';
+    case ExistingUserType.company:
+      return 'Company';
+  }
 }
 
 class NailStoreApp extends StatelessWidget {
@@ -49,7 +74,7 @@ class _MainShellState extends State<MainShell> {
   final List<Widget> _pages = const [
     HomePage(),
     JntSalonPage(),
-    CreatePage(),
+    public_request.RequestCustomDesignPage(), // public version
     ArtistsPage(),
     ProfileEntryPage(),
   ];
@@ -98,186 +123,333 @@ class _MainShellState extends State<MainShell> {
 }
 
 ///================================
-/// HOME PAGE
+/// HOME PAGE  (REPLACE YOUR ENTIRE HomePage CLASS WITH THIS)
 ///================================
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
-  void _showLoginSheet(BuildContext context) {
-  showDialog(
-    context: context,
-    builder: (ctx) {
-      return Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Welcome',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF333333),
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Choose how you want to continue.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Color(0xFF666666),
-                ),
-              ),
-              const SizedBox(height: 20),
+  // ---------------- Existing Customer Selector ----------------
+  void _showExistingCustomerDialog(BuildContext context) {
+    ExistingUserType? _type = ExistingUserType.client;
+    final TextEditingController _nameController = TextEditingController();
 
-              // New Customer text
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'New Customer',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF333333),
-                  ),
-                ),
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocalState) {
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
               ),
-              const SizedBox(height: 4),
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'First time here? Create your profile to shop custom nail designs.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF777777),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(ctx); // close dialog
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const ProfileEntryPage(),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Existing Customer',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF333333),
                       ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: kPink,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
                     ),
-                  ),
-                  child: const Text(
-                    'Continue as New Customer',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Select your account type to continue.',
+                      style: TextStyle(fontSize: 13, color: Color(0xFF666666)),
+                    ),
+                    const SizedBox(height: 16),
 
-              const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: ExistingUserType.values.map((t) {
+                        final selected = _type == t;
+                        return ChoiceChip(
+                          label: Text(_labelForType(t)),
+                          selected: selected,
+                          selectedColor: kPink.withOpacity(0.15),
+                          labelStyle: TextStyle(
+                            color: selected ? kPink : const Color(0xFF333333),
+                            fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+                          ),
+                          onSelected: (_) => setLocalState(() => _type = t),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 16),
 
-              // Existing Customer text
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Existing Customer',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF333333),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 4),
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Already have an account? Log in to see your orders and favorites.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF777777),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Existing customer login not implemented yet.',
+                    if (_type == ExistingUserType.client) ...[
+                      const Text(
+                        'Your Name (for greeting)',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF333333),
                         ),
                       ),
-                    );
-                  },
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    side: const BorderSide(color: kPink),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: _nameController,
+                        decoration: InputDecoration(
+                          hintText: 'Jane Doe',
+                          filled: true,
+                          fillColor: Colors.white,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          focusedBorder: const OutlineInputBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(12)),
+                            borderSide: BorderSide(color: kPink, width: 1.5),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              side: const BorderSide(color: kPink),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text(
+                              'Cancel',
+                              style: TextStyle(
+                                color: kPink,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () {
+                              Navigator.pop(ctx); // close dialog
+
+                              switch (_type) {
+                                case ExistingUserType.client:
+                                  final name = _nameController.text.trim().isEmpty
+                                      ? 'Client'
+                                      : _nameController.text.trim();
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => ClientHomePage(clientName: name),
+                                    ),
+                                  );
+                                  break;
+
+                                case ExistingUserType.artist:
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => ArtistsPage(),
+                                    ),
+                                  );
+                                  break;
+
+                                case ExistingUserType.company:
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => CompanyHomePage(companyName: 'Company'),
+                                    ),
+                                  );
+                                  break;
+
+                                default:
+                                  break;
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: kPink,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text(
+                              'Continue',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ---------------- Login Sheet ----------------
+  void _showLoginSheet(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Welcome',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF333333),
                   ),
-                  child: const Text(
-                    'Continue as Existing Customer',
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Choose how you want to continue.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13, color: Color(0xFF666666)),
+                ),
+                const SizedBox(height: 20),
+
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'New Customer',
                     style: TextStyle(
-                      color: kPink,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF333333),
                     ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        ),
-      );
-    },
-  );
-}
+                const SizedBox(height: 4),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'First time here? Create your profile to shop custom nail designs.',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF777777)),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const ProfileEntryPage(),
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kPink,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      'Continue as New Customer',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
 
-  Widget _heroSection(BuildContext context) {
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Existing Customer',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF333333),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Already have an account? Log in to see your orders and favorites.',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF777777)),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _showExistingCustomerDialog(context);
+                    },
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      side: const BorderSide(color: kPink),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      'Continue as Existing Customer',
+                      style: TextStyle(color: kPink, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ---------------- home page UI helpers ----------------
+  Widget _heroSection(BuildContext context) { /* your existing content unchanged */ 
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
       child: Stack(
         children: [
-          // Background image: hand with paintbrush & drop onto nail
           SizedBox(
             height: 230,
             width: double.infinity,
-            child: Image.asset(
-              'assets/images/hero_nails.png', // make sure this exists
-              fit: BoxFit.cover,
-            ),
+            child: Image.asset('assets/images/hero_nails.png', fit: BoxFit.cover),
           ),
-          // Gradient overlay
           Positioned.fill(
             child: Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withOpacity(0.15),
-                    Colors.black.withOpacity(0.7),
-                  ],
+                  begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                  colors: [Colors.black.withOpacity(0.15), Colors.black.withOpacity(0.7)],
                 ),
               ),
             ),
           ),
-          // Text and buttons
           Positioned.fill(
             child: Padding(
               padding: const EdgeInsets.all(20),
@@ -288,70 +460,40 @@ class HomePage extends StatelessWidget {
                   const Text(
                     'Art in Every Stroke',
                     style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      height: 1.2,
-                    ),
+                      fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white, height: 1.2),
                   ),
                   const SizedBox(height: 8),
                   const Text(
                     'Hand-painted nail designs from artists around the world, made just for you.',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Color(0xFFEFEFEF),
-                      height: 1.4,
-                    ),
+                    style: TextStyle(fontSize: 13, color: Color(0xFFEFEFEF), height: 1.4),
                   ),
                   const SizedBox(height: 14),
                   Row(
                     children: [
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: () {
-                            // TODO: navigate to designs / create tab
-                          },
+                          onPressed: () {},
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
                             foregroundColor: kPink,
                             padding: const EdgeInsets.symmetric(vertical: 10),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(999),
-                            ),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
                           ),
-                          child: const Text(
-                            'Browse Designs',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                          child: const Text('Browse Designs', style: TextStyle(fontWeight: FontWeight.w600)),
                         ),
                       ),
                       const SizedBox(width: 10),
                       ElevatedButton.icon(
-                        onPressed: () {
-                          // TODO: navigate to artist signup flow
-                        },
-                        icon: const Icon(
-                          Icons.brush,
-                          size: 18,
-                        ),
-                        label: const Text(
-                          'Become an Artist',
-                          style: TextStyle(fontSize: 12),
-                        ),
+                        onPressed: () {},
+                        icon: const Icon(Icons.brush, size: 18),
+                        label: const Text('Become an Artist', style: TextStyle(fontSize: 12)),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white.withOpacity(0.16),
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 9,
-                            horizontal: 12,
-                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 12),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(999),
-                            side: BorderSide(
-                              color: Colors.white.withOpacity(0.4),
-                            ),
+                            side: BorderSide(color: Colors.white.withOpacity(0.4)),
                           ),
                         ),
                       ),
@@ -366,27 +508,18 @@ class HomePage extends StatelessWidget {
     );
   }
 
-  Widget _sectionTitle(String title, {String? subtitle}) {
+  Widget buildSectionTitle(String title, {String? subtitle}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           title,
           style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF333333),
-          ),
+            fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF333333)),
         ),
         if (subtitle != null) ...[
           const SizedBox(height: 4),
-          Text(
-            subtitle,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Color(0xFF777777),
-            ),
-          ),
+          Text(subtitle, style: const TextStyle(fontSize: 12, color: Color(0xFF777777))),
         ],
       ],
     );
@@ -396,71 +529,38 @@ class HomePage extends StatelessWidget {
     return Container(
       width: 160,
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: const [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 10,
-            offset: Offset(0, 4),
-          ),
-        ],
+        color: Colors.white, borderRadius: BorderRadius.circular(18),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 4))],
       ),
       child: Column(
         children: [
           Expanded(
             child: Container(
               decoration: const BoxDecoration(
-                borderRadius: BorderRadius.vertical(
-                  top: Radius.circular(18),
-                ),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
                 gradient: LinearGradient(
                   colors: [Color(0xFFFFE0EC), Color(0xFFFFF5FA)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+                  begin: Alignment.topLeft, end: Alignment.bottomRight,
                 ),
               ),
-              child: const Center(
-                child: Icon(
-                  Icons.image,
-                  color: kPink,
-                  size: 32,
-                ),
-              ),
+              child: const Center(child: Icon(Icons.image, color: kPink, size: 32)),
             ),
           ),
           Padding(
-            padding:
-                const EdgeInsets.only(left: 12, right: 12, top: 8, bottom: 4),
-            child: Text(
-              title,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+            padding: const EdgeInsets.only(left: 12, right: 12, top: 8, bottom: 4),
+            child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
           ),
           Padding(
             padding: const EdgeInsets.only(left: 12, right: 12, bottom: 10),
             child: Align(
               alignment: Alignment.centerLeft,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFFF0F7),
-                  borderRadius: BorderRadius.circular(999),
+                  color: const Color(0xFFFFF0F7), borderRadius: BorderRadius.circular(999),
                 ),
-                child: Text(
-                  tag,
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: kPink,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+                child: Text(tag, style: const TextStyle(fontSize: 10, color: kPink, fontWeight: FontWeight.w500)),
               ),
             ),
           ),
@@ -474,20 +574,12 @@ class HomePage extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          width: 26,
-          height: 26,
-          decoration: BoxDecoration(
-            color: const Color(0xFFFFE0EC),
-            borderRadius: BorderRadius.circular(999),
-          ),
+          width: 26, height: 26,
+          decoration: BoxDecoration(color: const Color(0xFFFFE0EC), borderRadius: BorderRadius.circular(999)),
           child: Center(
             child: Text(
               number.toString(),
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: kPink,
-              ),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: kPink),
             ),
           ),
         ),
@@ -496,22 +588,9 @@ class HomePage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+              Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
               const SizedBox(height: 4),
-              Text(
-                description,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF666666),
-                  height: 1.4,
-                ),
-              ),
+              Text(description, style: const TextStyle(fontSize: 12, color: Color(0xFF666666), height: 1.4)),
             ],
           ),
         ),
@@ -525,10 +604,7 @@ class HomePage extends StatelessWidget {
       appBar: AppBar(
         title: const Text(
           'Nail Online Store',
-          style: TextStyle(
-            color: Color(0xFF333333),
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(color: Color(0xFF333333), fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.white,
         elevation: 0,
@@ -538,13 +614,7 @@ class HomePage extends StatelessWidget {
             padding: const EdgeInsets.only(right: 12),
             child: TextButton(
               onPressed: () => _showLoginSheet(context),
-              child: const Text(
-                'Login',
-                style: TextStyle(
-                  color: kPink,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              child: const Text('Login', style: TextStyle(color: kPink, fontWeight: FontWeight.bold)),
             ),
           ),
         ],
@@ -555,17 +625,12 @@ class HomePage extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Search bar
               TextField(
                 decoration: InputDecoration(
                   hintText: 'Search nail designs or artists',
                   prefixIcon: const Icon(Icons.search),
-                  filled: true,
-                  fillColor: Colors.white,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 0,
-                  ),
+                  filled: true, fillColor: Colors.white,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(24),
                     borderSide: BorderSide.none,
@@ -574,15 +639,10 @@ class HomePage extends StatelessWidget {
               ),
               const SizedBox(height: 18),
 
-              // Hero
               _heroSection(context),
               const SizedBox(height: 24),
 
-              // Trending
-              _sectionTitle(
-                'Trending Now',
-                subtitle: 'Popular hand-painted sets loved by the community',
-              ),
+              buildSectionTitle('Trending Now', subtitle: 'Popular hand-painted sets loved by the community'),
               const SizedBox(height: 12),
               SizedBox(
                 height: 160,
@@ -591,20 +651,8 @@ class HomePage extends StatelessWidget {
                   itemCount: 5,
                   separatorBuilder: (_, __) => const SizedBox(width: 12),
                   itemBuilder: (context, index) {
-                    final titles = [
-                      'Pastel Brush Strokes',
-                      'Chrome Tips',
-                      'Minimal French',
-                      'Galaxy Drip',
-                      'Blush Ombre',
-                    ];
-                    final tags = [
-                      'Hand-painted',
-                      'Metallic',
-                      'Classic',
-                      'Bold',
-                      'Soft glam',
-                    ];
+                    final titles = ['Pastel Brush Strokes', 'Chrome Tips', 'Minimal French', 'Galaxy Drip', 'Blush Ombre'];
+                    final tags   = ['Hand-painted', 'Metallic', 'Classic', 'Bold', 'Soft glam'];
                     final i = index % titles.length;
                     return _trendingCard(titles[i], tags[i]);
                   },
@@ -612,46 +660,21 @@ class HomePage extends StatelessWidget {
               ),
               const SizedBox(height: 24),
 
-              // How it works
-              _sectionTitle(
-                'How It Works',
-                subtitle:
-                    'Order custom press-on sets that fit your nails perfectly.',
-              ),
+              buildSectionTitle('How It Works', subtitle: 'Order custom press-on sets that fit your nails perfectly.'),
               const SizedBox(height: 12),
-              _howItWorksStep(
-                1,
-                'Tell us your style',
-                'Share your inspo pics, colors and nail shape. Our artists turn your vision into a design.',
-              ),
+              _howItWorksStep(1, 'Tell us your style', 'Share your inspo pics, colors and nail shape. Our artists turn your vision into a design.'),
               const SizedBox(height: 10),
-              _howItWorksStep(
-                2,
-                'Get matched to artists',
-                'Browse proposals from multiple artists and choose the one that fits your vibe and budget.',
-              ),
+              _howItWorksStep(2, 'Get matched to artists', 'Browse proposals from multiple artists and choose the one that fits your vibe and budget.'),
               const SizedBox(height: 10),
-              _howItWorksStep(
-                3,
-                'Receive & apply',
-                'Your custom set is shipped to your door with a sizing kit and easy application instructions.',
-              ),
+              _howItWorksStep(3, 'Receive & apply', 'Your custom set is shipped to your door with a sizing kit and easy application instructions.'),
               const SizedBox(height: 28),
 
-              // CTA strip
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(18),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Colors.black12,
-                      blurRadius: 10,
-                      offset: Offset(0, 4),
-                    ),
-                  ],
+                  boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 4))],
                 ),
                 child: Row(
                   children: [
@@ -660,23 +683,12 @@ class HomePage extends StatelessWidget {
                     const Expanded(
                       child: Text(
                         'Ready to find your next favorite set?',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                       ),
                     ),
                     TextButton(
-                      onPressed: () {
-                        // TODO: navigate to create / designs tab
-                      },
-                      child: const Text(
-                        'Start now',
-                        style: TextStyle(
-                          color: kPink,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      onPressed: () {},
+                      child: const Text('Start now', style: TextStyle(color: kPink, fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),
@@ -688,6 +700,7 @@ class HomePage extends StatelessWidget {
     );
   }
 }
+
 
 ///================================
 /// OTHER TABS (simple placeholders)
@@ -715,19 +728,6 @@ class CreatePage extends StatelessWidget {
       title: 'Create',
       text:
           'This is the Create page.\nUse this area for custom nail design requests.',
-    );
-  }
-}
-
-class ArtistsPage extends StatelessWidget {
-  const ArtistsPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const SimpleScaffoldPage(
-      title: 'Artists',
-      text:
-          'This is the Artists page.\nShow artist lists, portfolios, and profiles here.',
     );
   }
 }
@@ -774,123 +774,78 @@ class ProfileEntryPage extends StatefulWidget {
 class _ProfileEntryPageState extends State<ProfileEntryPage> {
   bool _clientSelected = false;
   bool _artistSelected = false;
-  bool _companySelected = false; // can be selected too, but not required as multi
+  bool _companySelected = false;
+
+  bool get _anySelected =>
+      _clientSelected || _artistSelected || _companySelected;
 
   void _toggleClient() {
     setState(() {
-      // If Company was selected, turn it off
-      if (_companySelected) {
-        _companySelected = false;
-      }
       _clientSelected = !_clientSelected;
+      // Company is exclusive
+      if (_clientSelected) _companySelected = false;
     });
   }
 
   void _toggleArtist() {
     setState(() {
-      // If Company was selected, turn it off
-      if (_companySelected) {
-        _companySelected = false;
-      }
       _artistSelected = !_artistSelected;
+      // Company is exclusive
+      if (_artistSelected) _companySelected = false;
     });
   }
 
   void _toggleCompany() {
     setState(() {
-      if (_companySelected) {
-        // Tapping again just unselects Company
-        _companySelected = false;
-      } else {
-        // Company is exclusive → turn off Client/Artist
-        _companySelected = true;
+      // Company cannot be selected with Client/Artist
+      final newValue = !_companySelected;
+      _companySelected = newValue;
+      if (newValue) {
         _clientSelected = false;
         _artistSelected = false;
       }
     });
   }
 
-  Widget _roleCard({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required bool selected,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFFFFF0F7) : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: selected ? kPink : const Color(0xFFE0E0E0),
-            width: selected ? 2 : 1,
-          ),
-          boxShadow: const [
-            BoxShadow(
-              color: Colors.black12,
-              blurRadius: 8,
-              offset: Offset(0, 3),
-            ),
-          ],
+  void _onContinue() {
+    if (!_anySelected) return;
+
+    // Client + Artist => joint profile page
+    if (_clientSelected && _artistSelected) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => const ClientArtistProfilePage(),
         ),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: selected ? kPink : const Color(0xFFFFE0EC),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                icon,
-                color: selected ? Colors.white : kPink,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF333333),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF666666),
-                      height: 1.4,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Icon(
-              selected ? Icons.check_circle : Icons.radio_button_unchecked,
-              color: selected ? kPink : const Color(0xFFBDBDBD),
-            ),
-          ],
+      );
+    }
+    // Client only
+    else if (_clientSelected) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => const ClientProfilePage(),
         ),
-      ),
-    );
+      );
+    }
+    // Artist only
+    else if (_artistSelected) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => const ArtistProfilePage(),
+        ),
+      );
+    }
+    // Company only
+    else if (_companySelected) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => const CompanyProfilePage(),
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final bool anySelected = _clientSelected || _artistSelected || _companySelected;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -906,106 +861,77 @@ class _ProfileEntryPageState extends State<ProfileEntryPage> {
       ),
       backgroundColor: const Color(0xFFF5F5F5),
       body: SafeArea(
-        child: SingleChildScrollView(
+        child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Tell us how you want to use JNT Nails.',
+                'Tell us how you’ll be using JustNailTips.',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                   color: Color(0xFF333333),
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               const Text(
-                'You can select both Client and Artist if you buy and sell nail designs. Company can also be selected if you purchase on behalf of a business.',
+                'You can select Client, Artist, or both. Company is a separate account type.',
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 13,
                   color: Color(0xFF777777),
-                  height: 1.5,
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
 
-              // Client + Artist row (multi-select)
-              Row(
-                children: [
-                  Expanded(
-                    child: _roleCard(
-                      title: 'Client',
-                      subtitle: 'I want to purchase nail designs for myself or others.',
-                      icon: Icons.shopping_bag_outlined,
-                      selected: _clientSelected,
-                      onTap: _toggleClient,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _roleCard(
-                      title: 'Artist',
-                      subtitle: 'I want to sell my nail designs and take custom requests.',
-                      icon: Icons.brush_outlined,
-                      selected: _artistSelected,
-                      onTap: _toggleArtist,
-                    ),
-                  ),
-                ],
+              // Client card
+              _AccountTypeCard(
+                title: 'Client',
+                description: 'Request custom designs and order press-on sets.',
+                icon: Icons.face_retouching_natural,
+                selected: _clientSelected,
+                onTap: _toggleClient,
               ),
+              const SizedBox(height: 12),
 
-              const SizedBox(height: 16),
+              // Artist card
+              _AccountTypeCard(
+                title: 'Artist',
+                description: 'Create designs and respond to client requests.',
+                icon: Icons.brush_rounded,
+                selected: _artistSelected,
+                onTap: _toggleArtist,
+              ),
+              const SizedBox(height: 12),
 
-              // Company (full width)
-              _roleCard(
+              // Company card (exclusive)
+              _AccountTypeCard(
                 title: 'Company',
-                subtitle: 'I want to purchase nail designs on behalf of a salon or brand.',
-                icon: Icons.apartment_outlined,
+                description:
+                    'For salons, studios, and brands managing multiple artists.',
+                icon: Icons.apartment_rounded,
                 selected: _companySelected,
                 onTap: _toggleCompany,
               ),
 
-              const SizedBox(height: 24),
+              const Spacer(),
 
-              // Continue button (future: route to specific onboarding based on selection)
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: anySelected
-                    ? () {
-                        if (_clientSelected) {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const ClientProfilePage(),
-                            ),
-                          );
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Artist/Company onboarding not implemented yet. Please select Client to continue.',
-                              ),
-                            ),
-                          );
-                        }
-                      }
-                    : null,
+                  onPressed: _anySelected ? _onContinue : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: kPink,
+                    backgroundColor:
+                        _anySelected ? kPink : Colors.grey.shade400,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    disabledBackgroundColor: Colors.grey.shade300,
-                    disabledForegroundColor: Colors.white,
                   ),
                   child: const Text(
                     'Continue',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -1016,6 +942,88 @@ class _ProfileEntryPageState extends State<ProfileEntryPage> {
     );
   }
 }
+
+/// Small reusable card widget for each account type
+class _AccountTypeCard extends StatelessWidget {
+  final String title;
+  final String description;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _AccountTypeCard({
+    required this.title,
+    required this.description,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFFFFF5FA) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected ? kPink : Colors.grey.shade300,
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: selected ? kPink.withOpacity(0.12) : const Color(0xFFF5F5F5),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                icon,
+                color: selected ? kPink : const Color(0xFF555555),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                      color: const Color(0xFF333333),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF777777),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (selected)
+              const Icon(
+                Icons.check_circle,
+                color: kPink,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+  
 ///================================
 /// CLIENT PROFILE PAGE
 ///================================
@@ -1028,6 +1036,7 @@ class ClientProfilePage extends StatefulWidget {
 
 class _ClientProfilePageState extends State<ClientProfilePage> {
   final _formKey = GlobalKey<FormState>();
+  final _paymentFormKey = GlobalKey<FormState>();
 
   // Basic info controllers
   final TextEditingController _nameController = TextEditingController();
@@ -1107,53 +1116,54 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     }
   }
   void _savePaymentMethod() {
-    if (!(_formKey.currentState?.validate() ?? false)) {
-      // Let form validation messages show for required fields
-      return;
-    }
-
-    String description;
-
-    switch (_selectedPaymentType) {
-      case PaymentType.creditCard:
-        final raw =
-            _cardNumberController.text.replaceAll(' ', '').replaceAll('-', '');
-        final last4 = raw.length >= 4 ? raw.substring(raw.length - 4) : raw;
-        description =
-            'Credit Card •••• $last4 (${_cardNameController.text.trim()})';
-        break;
-
-      case PaymentType.applePay:
-        description =
-            'Apple Pay (${_paymentAccountController.text.trim()})';
-        break;
-
-      case PaymentType.paypal:
-        description =
-            'PayPal (${_paymentAccountController.text.trim()})';
-        break;
-
-      case PaymentType.venmo:
-        description =
-            'Venmo (${_paymentAccountController.text.trim()})';
-        break;
-    }
-
-    setState(() {
-      _savedPaymentMethods.add(description);
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Payment method saved: $description')),
-    );
-
-    // Clear only payment-related fields
-    _cardNameController.clear();
-    _cardNumberController.clear();
-    _cardExpiryController.clear();
-    _cardCvvController.clear();
-    _paymentAccountController.clear();
+  // ✅ Validate ONLY the payment fields
+  if (!(_paymentFormKey.currentState?.validate() ?? false)) {
+    return;
   }
+
+  String description;
+
+  switch (_selectedPaymentType) {
+    case PaymentType.creditCard:
+      final raw =
+          _cardNumberController.text.replaceAll(' ', '').replaceAll('-', '');
+      final last4 = raw.length >= 4 ? raw.substring(raw.length - 4) : raw;
+      description =
+          'Credit Card •••• $last4 (${_cardNameController.text.trim()})';
+      break;
+
+    case PaymentType.applePay:
+      description =
+          'Apple Pay (${_paymentAccountController.text.trim()})';
+      break;
+
+    case PaymentType.paypal:
+      description =
+          'PayPal (${_paymentAccountController.text.trim()})';
+      break;
+
+    case PaymentType.venmo:
+      description =
+          'Venmo (${_paymentAccountController.text.trim()})';
+      break;
+  }
+
+  setState(() {
+    _savedPaymentMethods.add(description);
+  });
+
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text('Payment method saved: $description')),
+  );
+
+  // Clear only payment-related fields
+  _cardNameController.clear();
+  _cardNumberController.clear();
+  _cardExpiryController.clear();
+  _cardCvvController.clear();
+  _paymentAccountController.clear();
+}
+
 
   String? _selectedNailLength;
 
@@ -1292,27 +1302,73 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     super.dispose();
   }
 
-  void _submitProfile() {
-    if (_formKey.currentState?.validate() ?? false) {
-      if (_selectedState == null || _selectedCountry == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please select State and Country.'),
-          ),
-        );
-        return;
-      }
+    void _submitProfile() {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
 
-      // Simulate saving profile & staying on page
+    if (_selectedState == null || _selectedCountry == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Client profile created (simulated).'),
+          content: Text('Please select State and Country.'),
         ),
       );
+      return;
     }
+
+    // ✅ Require all nail dimensions
+    final bool leftComplete =
+        _leftHand.values.every((c) => c.text.trim().isNotEmpty);
+    final bool rightComplete =
+        _rightHand.values.every((c) => c.text.trim().isNotEmpty);
+
+    if (!leftComplete || !rightComplete) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter nail dimensions for all 10 fingers.'),
+        ),
+      );
+      return;
+    }
+
+    // ✅ Require nail shape
+    if (_selectedNailShape == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a nail shape.'),
+        ),
+      );
+      return;
+    }
+
+    // ✅ Require nail length
+    if (_selectedNailLength == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a nail length.'),
+        ),
+      );
+      return;
+    }
+
+    // ✅ Everything is valid – get the client name
+    final String name = _nameController.text.trim();
+
+    // TODO: save data to backend here
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Account created! Redirecting to your client page...'),
+      ),
+    );
+
+    // 👉 Navigate to the new ClientHomePage
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => ClientHomePage(clientName: name),
+      ),
+    );
   }
 
-  Widget _sectionTitle(String title) {
+  Widget buildSectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(
@@ -1424,30 +1480,30 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
 
         const SizedBox(height: 20),
 
-        _buildTextField(
+        buildLabeledTextField(
           label: 'Name',
           controller: _nameController,
           requiredField: true,
         ),
         const SizedBox(height: 12),
-        _buildTextField(
+        buildLabeledTextField(
           label: 'Email',
           controller: _emailController,
           requiredField: true,
           keyboardType: TextInputType.emailAddress,
         ),
         const SizedBox(height: 12),
-        _buildTextField(
+        buildLabeledTextField(
           label: 'Instagram',
           controller: _instagramController,
         ),
         const SizedBox(height: 12),
-        _buildTextField(
+        buildLabeledTextField(
           label: 'TikTok',
           controller: _tiktokController,
         ),
         const SizedBox(height: 12),
-        _buildTextField(
+        buildLabeledTextField(
           label: 'Bio',
           controller: _bioController,
           maxLines: 4,
@@ -1457,7 +1513,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
   );
 }
 
-    Widget _buildTextField({
+    Widget buildLabeledTextField({
     required String label,
     required TextEditingController controller,
     bool requiredField = false,
@@ -1503,7 +1559,11 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
               : null,
           decoration: InputDecoration(
             counterText: '',
-            hintText: hintText,
+            hintText: hintText ?? 'Enter $label',
+            hintStyle: const TextStyle(
+              color: Color(0xFFBDBDBD),
+              fontSize: 13,
+            ),
             filled: true,
             fillColor: Colors.white,
             contentPadding:
@@ -1530,21 +1590,21 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle('Address Information'),
+        buildSectionTitle('Address Information'),
         const SizedBox(height: 4),
-        _buildTextField(
+        buildLabeledTextField(
           label: 'Street Address',
           controller: _streetController,
           requiredField: true,
         ),
         const SizedBox(height: 12),
-        _buildTextField(
+        buildLabeledTextField(
           label: 'City',
           controller: _cityController,
           requiredField: true,
         ),
         const SizedBox(height: 12),
-        _buildDropdown<String>(
+        buildLabeledDropdown<String>(
           label: 'State',
           requiredField: true,
           value: _selectedState,
@@ -1556,14 +1616,14 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
           },
         ),
         const SizedBox(height: 12),
-        _buildTextField(
+        buildLabeledTextField(
           label: 'Zip Code',
           controller: _zipController,
           requiredField: true,
           keyboardType: TextInputType.number,
         ),
         const SizedBox(height: 12),
-        _buildDropdown<String>(
+        buildLabeledDropdown<String>(
           label: 'Country',
           requiredField: true,
           value: _selectedCountry,
@@ -1578,7 +1638,7 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     );
   }
 
-  Widget _buildDropdown<T>({
+  Widget buildLabeledDropdown<T>({
     required String label,
     required bool requiredField,
     required T? value,
@@ -1691,6 +1751,11 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
                         fontSize: 12,
                         color: Colors.grey.shade400,
                       ),
+                      suffixText: 'mm',
+                      suffixStyle: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF666666),
+                      ),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 8,
                         vertical: 6,
@@ -1704,14 +1769,6 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 2),
-                const Text(
-                  'mm',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Color(0xFF666666),
-                  ),
-                ),
               ],
             ),
           );
@@ -1721,7 +1778,22 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
 
     return Column(
       children: [
-        _sectionTitle('Nail Dimension (in mm)'),
+        buildSectionTitle('Nail Dimension (in mm)'),
+        Text.rich(
+        TextSpan(
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF333333),
+          ),
+          children: const [
+            TextSpan(
+              text: ' *',
+              style: TextStyle(color: kPink),
+            ),
+          ],
+        ),
+      ),
         const SizedBox(height: 8),
         const Center(
           child: Text(
@@ -1986,12 +2058,20 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Choose Your Nail Shape',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF333333),
+        const Text.rich(
+          TextSpan(
+            text: 'Choose Your Nail Shape',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF333333),
+            ),
+            children: [
+              TextSpan(
+                text: ' *',
+                style: TextStyle(color: kPink),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 4),
@@ -2022,12 +2102,20 @@ class _ClientProfilePageState extends State<ClientProfilePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Choose Your Nail Length',
+        const Text.rich(
+          TextSpan(
+          text: 'Choose Your Nail Length',
           style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF333333),
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF333333),
+            ),
+            children: [
+              TextSpan(
+                text: ' *',
+                style: TextStyle(color: kPink),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 4),
@@ -2245,13 +2333,13 @@ Widget _buildSizingKitSectionWithContext(BuildContext context) {
       case PaymentType.creditCard:
         return Column(
           children: [
-            _buildTextField(
+            buildLabeledTextField(
               label: 'Name on Card',
               controller: _cardNameController,
               requiredField: true,
             ),
             const SizedBox(height: 12),
-            _buildTextField(
+            buildLabeledTextField(
               label: 'Card Number',
               controller: _cardNumberController,
               requiredField: true,
@@ -2263,7 +2351,7 @@ Widget _buildSizingKitSectionWithContext(BuildContext context) {
             Row(
               children: [
                 Expanded(
-                  child: _buildTextField(
+                  child: buildLabeledTextField(
                     label: 'Expiry (MM/YY)',
                     controller: _cardExpiryController,
                     requiredField: true,
@@ -2274,7 +2362,7 @@ Widget _buildSizingKitSectionWithContext(BuildContext context) {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: _buildTextField(
+                  child: buildLabeledTextField(
                     label: 'CVV',
                     controller: _cardCvvController,
                     requiredField: true,
@@ -2289,7 +2377,7 @@ Widget _buildSizingKitSectionWithContext(BuildContext context) {
         );
 
       case PaymentType.applePay:
-        return _buildTextField(
+        return buildLabeledTextField(
           label: 'Apple ID / Email',
           controller: _paymentAccountController,
           requiredField: true,
@@ -2298,7 +2386,7 @@ Widget _buildSizingKitSectionWithContext(BuildContext context) {
         );
 
       case PaymentType.paypal:
-        return _buildTextField(
+        return buildLabeledTextField(
           label: 'PayPal Email',
           controller: _paymentAccountController,
           requiredField: true,
@@ -2307,7 +2395,7 @@ Widget _buildSizingKitSectionWithContext(BuildContext context) {
         );
 
       case PaymentType.venmo:
-        return _buildTextField(
+        return buildLabeledTextField(
           label: 'Venmo Username or Phone',
           controller: _paymentAccountController,
           requiredField: true,
@@ -2356,19 +2444,21 @@ Widget _buildSizingKitSectionWithContext(BuildContext context) {
     );
   }
   Widget _buildPaymentMethodSection() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: const [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 8,
-            offset: Offset(0, 3),
-          ),
-        ],
-      ),
+  return Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: const [
+        BoxShadow(
+          color: Colors.black12,
+          blurRadius: 8,
+          offset: Offset(0, 3),
+        ),
+      ],
+    ),
+    child: Form(
+      key: _paymentFormKey,            // 👈 NEW
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2391,7 +2481,7 @@ Widget _buildSizingKitSectionWithContext(BuildContext context) {
           ),
           const SizedBox(height: 12),
 
-          // Payment type chips
+          // chips...
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -2456,11 +2546,13 @@ Widget _buildSizingKitSectionWithContext(BuildContext context) {
           _buildSavedPaymentMethodsList(),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   @override
   Widget build(BuildContext context) {
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -2497,22 +2589,19 @@ Widget _buildSizingKitSectionWithContext(BuildContext context) {
                 const SizedBox(height: 20),
                 _buildNailLengthSection(),
                 const SizedBox(height: 24),
-                    // 👇 New: Nail Sizing Kit product card
-    Builder(
-      builder: (context) {
-        return Container(
-          margin: const EdgeInsets.only(bottom: 20),
-          child: _buildSizingKitSectionWithContext(context),
-        );
-      },
-    ),
+                // Nail Sizing Kit product card
+                Builder(
+                  builder: (context) {
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 20),
+                      child: _buildSizingKitSectionWithContext(context),
+                    );
+                  },
+                ),
                 const SizedBox(height: 24),
-    _buildPaymentMethodSection(),
-    const SizedBox(height: 20),
-// 👇 New: Manage Payment Methods button
-
-const SizedBox(height: 12),
-
+                _buildPaymentMethodSection(),
+                const SizedBox(height: 20),
+                const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -2535,6 +2624,597 @@ const SizedBox(height: 12),
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+// ========================================
+// CLIENT DASHBOARD PAGE (after account creation)
+// ========================================
+// put this AFTER the end of _ClientProfilePageState in main.dart
+
+class ClientHomePage extends StatefulWidget {
+  final String clientName;
+
+  const ClientHomePage({super.key, required this.clientName});
+
+  @override
+  State<ClientHomePage> createState() => _ClientHomePageState();
+}
+
+class _ClientHomePageState extends State<ClientHomePage> {
+  String get _initial =>
+      widget.clientName.trim().isNotEmpty ? widget.clientName.trim()[0].toUpperCase() : '?';
+
+  void _onMenuSelected(String value) {
+    if (value == 'manage') {
+      // Open profile edit
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => const ClientProfilePage(),
+        ),
+      );
+    } else if (value == 'signout') {
+      // Sign out → back to main shell / home
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const MainShell()),
+        (route) => false,
+      );
+    }
+  }
+
+  // If user taps any bottom tab, send them back to MainShell
+  void _onBottomNavTap(int index) {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const MainShell()),
+      (route) => false,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      // ---------- APP BAR ----------
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        surfaceTintColor: Colors.white,
+        leadingWidth: 140,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 12),
+          child: Row(
+            children: [
+              // 🔁 update path to your actual logo asset
+              Image.asset(
+                'assets/images/jnt_logo.png',
+                height: 30,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: PopupMenuButton<String>(
+              onSelected: _onMenuSelected,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: 'manage',
+                  child: Text('Manage Account'),
+                ),
+                PopupMenuItem(
+                  value: 'signout',
+                  child: Text('Sign Out'),
+                ),
+              ],
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5F5F5),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircleAvatar(
+                      radius: 14,
+                      backgroundColor: const Color(0xFFE3F2FD),
+                      child: Text(
+                        _initial,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1565C0),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      widget.clientName,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Color(0xFF333333),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(
+                      Icons.arrow_drop_down,
+                      size: 20,
+                      color: Color(0xFF616161),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+
+      // ---------- BODY SECTIONS ----------
+      backgroundColor: const Color(0xFFF5F5F5),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Welcome / Profile strip
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 8,
+                      offset: Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 22,
+                      backgroundColor: const Color(0xFFFFE0EC),
+                      child: Text(
+                        _initial,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: kPink,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Welcome back, ${widget.clientName}!',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF333333),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Ready for your next custom set?',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF777777),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // ---------- Quick Actions ----------
+              const Text(
+                'Quick Actions',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF333333),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  _QuickActionButton(
+                    icon: Icons.add_circle_outline,
+                    label: 'New Request',
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => client_request.ClientRequestCustomDesignPage(),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 12),
+                  _QuickActionButton(
+                    icon: Icons.shopping_bag_outlined,
+                    label: 'My Orders',
+                    onTap: () {
+                      // TODO: navigate to orders page
+                    },
+                  ),
+                  const SizedBox(width: 12),
+                  _QuickActionButton(
+                    icon: Icons.favorite_border,
+                    label: 'Favorites',
+                    onTap: () {
+                      // TODO: navigate to favorites
+                    },
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 24),
+
+              // ---------- My Nails / Current Design ----------
+              const Text(
+                'My Nails / Current Design',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF333333),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 6,
+                      offset: Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFFE0EC), Color(0xFFFFF5FA)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                      ),
+                      child: const Icon(Icons.brush, color: kPink),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'No active design yet',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Create a custom request to start your next set.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF777777),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => client_request.ClientRequestCustomDesignPage(),
+                          ),
+                        );
+                      },
+                      child: const Text(
+                        'Create',
+                        style: TextStyle(
+                          color: kPink,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // ---------- Upcoming Appointments & Orders ----------
+              const Text(
+                'Upcoming Appointments & Orders',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF333333),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 6,
+                      offset: Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: const Text(
+                  'You don’t have any upcoming appointments or active orders yet.',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF777777),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // ---------- Recommended Artists & Designs ----------
+              const Text(
+                'Recommended Artists & Designs',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF333333),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 160,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: 5,
+                  separatorBuilder: (_, __) => const SizedBox(width: 12),
+                  itemBuilder: (context, index) {
+                    return Container(
+                      width: 150,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(18),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Colors.black12,
+                            blurRadius: 6,
+                            offset: Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          Expanded(
+                            child: Container(
+                              decoration: const BoxDecoration(
+                                borderRadius: BorderRadius.vertical(
+                                  top: Radius.circular(18),
+                                ),
+                                gradient: LinearGradient(
+                                  colors: [
+                                    Color(0xFFFFE0EC),
+                                    Color(0xFFFFF5FA)
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                              ),
+                              child: const Center(
+                                child: Icon(Icons.image, color: kPink),
+                              ),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: const [
+                                Text(
+                                  'Artist Name',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  'Hand-painted florals',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Color(0xFF777777),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // ---------- Promos & Tips ----------
+              const Text(
+                'Promos & Tips',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF333333),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 6,
+                      offset: Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Get 10% off your first custom set',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: kPink,
+                      ),
+                    ),
+                    SizedBox(height: 6),
+                    Text(
+                      'Use code WELCOME10 at checkout. Limited time offer.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF777777),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+
+      // ---------- BOTTOM NAV ----------
+            bottomNavigationBar: BottomNavigationBar(
+        currentIndex: 0, // highlight "Home"
+        onTap: (index) {
+          // If user taps "Create" (center tab, index 2),
+          // open the Request Custom Design page for CLIENT
+          if (index == 2) {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => client_request.ClientRequestCustomDesignPage(),
+              ),
+            );
+            return; // stay on ClientHomePage for other tabs
+          }
+
+          // For now, other tabs do nothing (or later route them
+          // to other client-specific pages if you want).
+        },
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: kPink,
+        unselectedItemColor: const Color(0xFF9E9E9E),
+        backgroundColor: Colors.white,
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home_outlined),
+            activeIcon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.spa_outlined),
+            activeIcon: Icon(Icons.spa),
+            label: 'JNT Salon',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.add_circle_outline),
+            activeIcon: Icon(Icons.add_circle),
+            label: 'Create',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.brush_outlined),
+            activeIcon: Icon(Icons.brush),
+            label: 'Artists',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline),
+            activeIcon: Icon(Icons.person),
+            label: 'Profile',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Small button widget for Quick Actions row
+class _QuickActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _QuickActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, size: 20, color: kPink),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF333333),
+                ),
+              ),
+            ],
           ),
         ),
       ),
